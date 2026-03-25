@@ -85,6 +85,39 @@ header {
   z-index: 2;
 }
 
+/* ── CREDITS STRIP ────────────────────────────────────────── */
+.credits-strip {
+  background: var(--heat-navy);
+  border-bottom: 2px solid var(--border-gold);
+  padding: 0.3rem 1.2rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-family: 'Roboto Condensed', sans-serif;
+  font-size: 0.75rem;
+  color: rgba(255,255,255,0.5);
+  letter-spacing: 0.02em;
+}
+
+.credits-strip a {
+  color: var(--heat-yellow);
+  text-decoration: none;
+  font-weight: 700;
+  transition: color 0.15s;
+}
+
+.credits-strip a:hover {
+  color: var(--heat-orange);
+  text-decoration: underline;
+}
+
+.credits-sep {
+  color: var(--heat-red);
+  font-size: 0.9rem;
+  opacity: 0.6;
+}
+
 /* DECK BUILDER subtitle ribbon on banner bottom-left */
 .banner-subtitle {
   position: absolute; bottom: 0; left: 0;
@@ -1023,6 +1056,11 @@ tr:hover td { background: rgba(27,42,74,0.05); }
     <span class="copyright-sep">·</span>
     <span data-i18n="copyright_fanmade">Outil non officiel, créé par un fan — non affilié à Days of Wonder.</span>
   </div>
+  <div class="credits-strip">
+    <span>🛠️ Developed by <a href="https://boardgamegeek.com/profile/apiiii" target="_blank" rel="noopener">Apiiii</a></span>
+    <span class="credits-sep">·</span>
+    <span>Inspired by <a href="https://boardgamegeek.com/thread/2999532/garage-module-upgrades-tier-list-v50-updated-march/page/1" target="_blank" rel="noopener">Razor Oz's Garage Tier List</a></span>
+  </div>
 </header>
 
 <main>
@@ -1322,43 +1360,32 @@ function setLang(lang) {
 
 // ─── Card name translation (FR→EN) ────────────────────────────────────────
 // Basic heuristic dictionary + patterns for HEAT-type card games
+// Complete FR→EN dictionary — exact card names from heat_full.csv
+// Keys are lowercased for case-insensitive lookup
 const CARD_NAME_DICT = {
-  // General
-  'Feu': 'Fire', 'Eau': 'Water', 'Air': 'Air', 'Terre': 'Earth',
-  'Lumière': 'Light', 'Ombre': 'Shadow', 'Éclair': 'Lightning',
-  'Tempête': 'Storm', 'Glacier': 'Glacier', 'Explosion': 'Explosion',
-  'Vitesse': 'Speed', 'Force': 'Strength', 'Défense': 'Defense',
-  'Attaque': 'Attack', 'Magie': 'Magic', 'Poison': 'Poison',
-  'Soin': 'Heal', 'Bouclier': 'Shield', 'Épée': 'Sword',
-  'Arc': 'Bow', 'Flèche': 'Arrow', 'Guerrier': 'Warrior',
-  'Mage': 'Mage', 'Archer': 'Archer', 'Voleur': 'Thief',
-  'Paladin': 'Paladin', 'Druide': 'Druid', 'Barbare': 'Barbarian',
-  'Dragon': 'Dragon', 'Loup': 'Wolf', 'Aigle': 'Eagle',
-  'Phénix': 'Phoenix', 'Spectre': 'Specter', 'Golem': 'Golem',
-  // HEAT racing-specific
-  'Chaleur': 'Heat', 'Moteur': 'Engine', 'Turbo': 'Turbo',
-  'Frein': 'Brake', 'Accélération': 'Acceleration', 'Virage': 'Corner',
-  'Dérapage': 'Drift', 'Pilote': 'Driver', 'Course': 'Race',
-  'Piste': 'Track', 'Ravitaillement': 'Pit Stop', 'Roue': 'Wheel',
-  'Nitro': 'Nitro', 'Refroidissement': 'Cooling', 'Surchauffe': 'Overheat',
-  'Contrôle': 'Control', 'Réactif': 'Reactive', 'Agile': 'Agile',
-  'Prudent': 'Cautious', 'Agressif': 'Aggressive', 'Ralenti': 'Idle',
-  'Sprint': 'Sprint', 'Endurance': 'Endurance', 'Récupération': 'Recovery',
-  'Risque': 'Risk', 'Précision': 'Precision', 'Boost': 'Boost',
-  'Refroid': 'Cool', 'Stress': 'Stress', 'Glissement': 'Slide',
+  '4 roues motrices':              '4-Wheel Drive',
+  'aileron':                       'Spoiler',
+  'aileron avant':                 'Front Wing',
+  'carburant':                     'Fuel',
+  'carrosserie':                   'Bodywork',
+  'freins':                        'Brakes',
+  'heat complémentaire':           'Extra Heat',
+  'jupe latérale':                 'Side Skirt',
+  'pneus':                         'Tires',
+  "prise d'air":                   'Air Intake',
+  'pédale de gaz':                 'Gas Pedal',
+  'r.p.m.':                        'R.P.M.',
+  'suspension':                    'Suspension',
+  'système de refroidissement':    'Cooling System',
+  'turbo compresseur':             'Turbocharger',
 };
 
-function translateCardName(frName) {
+function translateCardName(frName, card) {
   if (currentLang === 'fr') return frName;
-  // Try direct match
-  if (CARD_NAME_DICT[frName]) return CARD_NAME_DICT[frName];
-  // Try word-by-word
-  const words = frName.split(/[\s\-_]+/);
-  const translated = words.map(w => {
-    const cap = w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
-    return CARD_NAME_DICT[cap] || CARD_NAME_DICT[w] || w;
-  });
-  return translated.join(' ');
+  // Use pre-computed NomEN if available
+  if (card && card.NomEN) return card.NomEN;
+  const key = (frName || '').trim().toLowerCase();
+  return CARD_NAME_DICT[key] || frName;
 }
 
 // ─── Scoring selection ────────────────────────────────────────────────────
@@ -1500,6 +1527,7 @@ function normaliseColumns(rows) {
     Boite:      g(r, COL_BOITE),
     Type:       g(r, COL_TYPE),
     Nom:        g(r, COL_NOM),
+    NomEN:      '',  // filled after load by translateCardName
     ScoreRazorOz: g(r, COL_RAZOROZ) || g(r, COL_SCORE_LEGACY) || '0',
     ScoreYours:   g(r, COL_YOURS_SAFE) || '',  // empty if column absent
     // Score = active scoring (set dynamically by applyScoring())
@@ -1524,6 +1552,11 @@ function normaliseColumns(rows) {
 function loadCSVText(text, filename) {
   const raw = parseCSV(text);
   csvData = normaliseColumns(raw);
+  // Pre-compute English names for all cards
+  csvData = csvData.map(r => ({
+    ...r,
+    NomEN: CARD_NAME_DICT[r.Nom.trim().toLowerCase()] || r.Nom,
+  }));
   applyScoring();
   document.getElementById('file-name').textContent = filename || 'heat_full.csv';
   document.getElementById('file-name').className = 'file-name loaded';
@@ -1561,7 +1594,10 @@ function renderCsvPreview(data) {
   // Show original columns (before normalisation aliases)
   const cols = Object.keys(data[0]).filter(c => !['ID','Boite','Type','Nom','Score'].includes(c) || Object.keys(data[0]).length <= 6);
   // Use the 5 normalised display cols
-  const dispCols = ['ID','Boite','Type','Nom','Speed','ScoreRazorOz','ScoreYours'];
+  const dispCols = ['ID','Boite','Type','Nom','NomEN','Speed','ScoreRazorOz','ScoreYours'];
+
+  // Rename columns for display
+  const colLabels = {'NomEN': currentLang === 'en' ? 'Name (EN)' : 'Nom (EN)'};
 
   let html = `
     <div class="csv-toolbar">
@@ -1571,7 +1607,7 @@ function renderCsvPreview(data) {
     </div>
     <div class="csv-table-wrap">
     <table id="csv-edit-table"><thead><tr>`;
-  dispCols.forEach(c => html += `<th>${c}</th>`);
+  dispCols.forEach(c => html += `<th>${colLabels[c] || c}</th>`);
   html += `<th class="del-col"></th></tr></thead><tbody>`;
 
   data.forEach((row, ri) => {
@@ -2029,7 +2065,7 @@ function renderDecks(result, variants, params) {
       cards.forEach(card => {
         const badgeClass = card._type === 'base' ? 'badge-base' : 'badge-adv';
         const badgeText  = typeLabel(card, currentLang);
-        const displayName = translateCardName(card.Nom);
+        const displayName = translateCardName(card.Nom, card);
         const boiteHtml = card.Boite ? `<span class="card-boite">${card.Boite}</span>` : '';
         const speedVal = card.Speed && card.Speed !== '' && card.Speed !== '0' ? card.Speed : null;
         const speedHtml = speedVal ? `<span class="card-speed" title="Speed">${speedVal}</span>` : '';
@@ -2112,7 +2148,7 @@ function renderDecks(result, variants, params) {
           cards.forEach(card => {
             const badgeClass = card._type === 'base' ? 'badge-base' : 'badge-adv';
             const badgeText  = typeLabel(card, currentLang);
-            const displayName = translateCardName(card.Nom);
+            const displayName = translateCardName(card.Nom, card);
             const boiteHtml = card.Boite ? `<span class="card-boite">${card.Boite}</span>` : '';
             const speedVal = card.Speed && card.Speed !== '' && card.Speed !== '0' ? card.Speed : null;
             const speedHtml = speedVal ? `<span class="card-speed" title="Speed">${speedVal}</span>` : '';
