@@ -1158,8 +1158,8 @@ tr:hover td { background: rgba(27,42,74,0.05); }
             <input type="number" id="nb-tries" min="1" max="5000" value="300">
           </div>
           <div class="field">
-            <label data-i18n="label_threshold">Seuil d'arrêt (% écart)</label>
-            <input type="number" id="nb-threshold" min="0.5" max="50" step="0.5" value="3">
+            <label data-i18n="label_threshold">Écart cible (%)</label>
+            <input type="number" id="nb-threshold" min="0" max="50" step="0.5" value="0.5">
           </div>
           <div class="field">
             <label data-i18n="label_seed">Graine aléatoire</label>
@@ -1261,7 +1261,7 @@ const TRANSLATIONS = {
     translate_note: '* Noms traduits automatiquement',
     generating: 'Génération...',
     label_tries: 'Essais max',
-    label_threshold: 'Seuil d\'arrêt (% écart)',
+    label_threshold: 'Écart cible (%)',
     algo_label: 'Algorithme',
     csv_edit_label: 'Édition CSV',
     label_seed: 'Graine aléatoire',
@@ -1277,7 +1277,7 @@ const TRANSLATIONS = {
     target_score: 'Score cible',
     spread_label: 'Écart max',
     attempts_used: 'Essais utilisés',
-    warn_threshold: 'Seuil non atteint ({pct}% > {t}%) — variantes asymétriques proposées ci-dessous.',
+    warn_threshold: 'Écart obtenu : {pct}% (cible : {t}%) — variantes asymétriques proposées ci-dessous.',
     variant_title: 'Variante asymétrique',
     variant_badge: 'VARIANTE',
     variant_hint: 'Cette variante dépasse le quota initial mais améliore l\'équilibre.',
@@ -1337,7 +1337,7 @@ const TRANSLATIONS = {
     translate_note: '* Names auto-translated',
     generating: 'Generating...',
     label_tries: 'Max attempts',
-    label_threshold: 'Stop threshold (% gap)',
+    label_threshold: 'Target spread (%)',
     algo_label: 'Algorithm',
     csv_edit_label: 'CSV Editor',
     label_seed: 'Random seed',
@@ -1351,7 +1351,7 @@ const TRANSLATIONS = {
     target_score: 'Target score',
     spread_label: 'Max spread',
     attempts_used: 'Attempts used',
-    warn_threshold: 'Threshold not met ({pct}% > {t}%) — asymmetric variants suggested below.',
+    warn_threshold: 'Spread obtained: {pct}% (target: {t}%) — asymmetric variants suggested below.',
     variant_title: 'Asymmetric variant',
     variant_badge: 'VARIANT',
     variant_hint: 'This variant exceeds the initial quota but improves balance.',
@@ -1841,11 +1841,13 @@ function estimateTarget(cards, Z, X, Y) {
   return (usedB + usedA) / Z;
 }
 
-function scorePenalty(decks, target) {
-  const scores = decks.map(d => d.score);
-  const spread = Math.max(...scores) - Math.min(...scores);
-  const absSum = scores.reduce((s, v) => s + Math.abs(v - target), 0);
-  return { penalty: absSum + spread * 1.5, spread };
+function scorePenalty(decks, target, targetSpread) {
+  const scores  = decks.map(d => d.score);
+  const spread  = Math.max(...scores) - Math.min(...scores);
+  const idealSpread = targetSpread * target;
+  const spreadError = Math.abs(spread - idealSpread);
+  const mean = scores.reduce((a, b) => a + b, 0) / scores.length;
+  return { penalty: spreadError * 2 + Math.abs(mean - target), spread };
 }
 
 function canAdd(deck, card, X, Y) {
@@ -1918,7 +1920,7 @@ function generateDecks() {
       if (!primary) { showAlert('error', t('err_no_solution')); return; }
 
       const spreadRatio = primary.spread / (primary.target || 1);
-      const thresholdMet = spreadRatio <= threshold;
+      const thresholdMet = Math.abs(spreadRatio - threshold) < 0.01;
 
       // ── If threshold not met, try asymmetric variants ─────────────────
       let variants = [];
@@ -1949,10 +1951,13 @@ function generateDecks() {
             if (v) variants.push({ result: v, dx, dy, vX, vY });
           } catch(e) { /* skip infeasible variant */ }
         }
-        // Keep only variants strictly better than primary, sort by spread asc
+        // Keep only variants strictly closer to target spread, sort by proximity
         variants = variants
-          .filter(v => v.result.spread < primary.spread)
-          .sort((a,b) => a.result.spread - b.result.spread);
+          .filter(v => Math.abs(v.result.spread / (v.result.target||1) - threshold) <
+                       Math.abs(primary.spread / (primary.target||1) - threshold))
+          .sort((a, b) =>
+            Math.abs(a.result.spread / (a.result.target||1) - threshold) -
+            Math.abs(b.result.spread / (b.result.target||1) - threshold));
       }
 
       generatedDecks = primary.decks;
@@ -1973,20 +1978,31 @@ function generateDecks() {
   }, 50);
 }
 
-function balancedAssign(cards, Z, X, Y, maxTries, threshold, seedBase) {
-  const target = estimateTarget(cards, Z, X, Y);
+function balancedAssign(cards, Z, X, Y, maxTries, targetSpread, seedBase) {
+  const globalTarget = estimateTarget(cards, Z, X, Y);
+
+  // Assign each deck a distinct score target spread evenly around globalTarget
+  // e.g. with Z=4 and targetSpread=0.1: targets at -15%, -5%, +5%, +15% of globalTarget
+  const deckTargets = Array.from({ length: Z }, (_, i) =>
+    globalTarget * (1 + targetSpread * (i - (Z - 1) / 2) / Math.max(1, Z - 1))
+  );
+
   let best = null;
   let bestPenalty = Infinity;
 
   for (let attempt = 0; attempt < maxTries; attempt++) {
-    const rand    = mulberry32(seedBase + attempt * 101);
+    const rand     = mulberry32(seedBase + attempt * 101);
     const shuffled = shuffleSeeded(cards, rand);
-    const decks   = Array.from({ length: Z }, () => ({ cards: [], names: new Set(), score: 0 }));
-    const usedIds = new Set();
-    let failed    = false;
+    // Shuffle deck target assignment so every attempt explores different orderings
+    const shuffledTargets = shuffleSeeded([...deckTargets], rand);
+    const decks    = Array.from({ length: Z }, (_, i) => ({
+      cards: [], names: new Set(), score: 0, deckTarget: shuffledTargets[i]
+    }));
+    const usedIds  = new Set();
+    let failed     = false;
 
     while (true) {
-      // Find incomplete decks sorted by lowest score first
+      // Find incomplete decks sorted by how far they are behind their individual target
       const incomplete = decks
         .map((d, i) => ({ d, i }))
         .filter(({ d }) => {
@@ -1994,7 +2010,7 @@ function balancedAssign(cards, Z, X, Y, maxTries, threshold, seedBase) {
           const a = d.cards.filter(c => isAdvCard(c)).length;
           return b < X || a < Y;
         })
-        .sort((x, y) => x.d.score - y.d.score);
+        .sort((x, y) => (x.d.score / x.d.deckTarget) - (y.d.score / y.d.deckTarget));
 
       if (!incomplete.length) break;
 
@@ -2005,12 +2021,11 @@ function balancedAssign(cards, Z, X, Y, maxTries, threshold, seedBase) {
         .sort((a, b) => {
           const sa = parseFloat(a.Score) || 0;
           const sb = parseFloat(b.Score) || 0;
-          return Math.abs(deck.score + sa - target) - Math.abs(deck.score + sb - target);
+          return Math.abs(deck.score + sa - deck.deckTarget) - Math.abs(deck.score + sb - deck.deckTarget);
         });
 
       if (!candidates.length) { failed = true; break; }
 
-      // Pick from top-6 window to add variety across attempts
       const window = Math.min(6, candidates.length);
       const chosen = candidates[Math.floor(rand() * window)];
       deck.cards.push(chosen);
@@ -2021,11 +2036,10 @@ function balancedAssign(cards, Z, X, Y, maxTries, threshold, seedBase) {
 
     if (failed) continue;
 
-    // Validate: no duplicate IDs across decks (already enforced by usedIds, double-check)
     const allIds = decks.flatMap(d => d.cards.map(c => c.ID));
     if (new Set(allIds).size !== allIds.length) continue;
 
-    const { penalty, spread } = scorePenalty(decks, target);
+    const { penalty, spread } = scorePenalty(decks, globalTarget, targetSpread);
 
     if (penalty < bestPenalty) {
       bestPenalty = penalty;
@@ -2036,13 +2050,13 @@ function balancedAssign(cards, Z, X, Y, maxTries, threshold, seedBase) {
           adv:  d.cards.filter(c => isAdvCard(c)),
           score: d.score,
         })),
-        target, penalty, spread,
+        target: globalTarget, penalty, spread,
         attempts_used: attempt + 1,
       };
     }
 
-    // Early stop if spread ratio is good enough
-    if (best && spread / (target || 1) < threshold) break;
+    // Early stop: spread is within 1pp of target
+    if (best && Math.abs(best.spread / (globalTarget || 1) - targetSpread) < 0.01) break;
   }
 
   return best;
