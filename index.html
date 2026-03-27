@@ -1623,7 +1623,7 @@ function renderExtensionCheckboxes(data) {
     label.appendChild(document.createTextNode(boite));
     grid.appendChild(label);
   });
-  document.getElementById('ext-panel').style.display = boites.length > 0 ? '' : 'none';
+  document.getElementById('ext-panel').style.display = boites.length > 0 ? 'block' : 'none';
 }
 
 function getSelectedExtensions() {
