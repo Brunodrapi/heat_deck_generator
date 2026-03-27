@@ -749,6 +749,38 @@ input[type="number"]::-webkit-inner-spin-button { opacity: 0.5; }
   opacity: 0.7;
 }
 
+/* ── EXTENSION CHECKBOXES ─────────────────────────────────── */
+.ext-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+}
+.ext-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: var(--heat-cream2);
+  border: 2px solid var(--border-gold);
+  border-radius: 4px;
+  padding: 0.25rem 0.6rem;
+  font-family: 'Oswald', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-mid);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.ext-chip input[type="checkbox"] { display: none; }
+.ext-chip.checked {
+  background: var(--heat-navy);
+  border-color: var(--heat-red);
+  color: var(--heat-cream);
+}
+.ext-chip:hover { border-color: var(--heat-orange); }
+#ext-panel { display: none; margin-top: 0.6rem; }
+
 /* ── CSV TABLE ────────────────────────────────────────────── */
 .csv-table-wrap { overflow-x: auto; max-height: 420px; overflow-y: auto; }
 
@@ -1084,7 +1116,7 @@ tr:hover td { background: rgba(27,42,74,0.05); }
               <div data-i18n="drop_hint">Glissez votre CSV ici ou cliquez</div>
               <div class="file-name" id="file-name">heat_full.csv</div>
             </div>
-            <button class="btn btn-load-default" onclick="loadDefaultCsv()" data-i18n="btn_load_default">CSV par défaut</button>
+            <button class="btn btn-load-default" onclick="loadDefaultCsv()" data-i18n="btn_load_default">Scoring par défaut</button>
           </div>
 
           <div class="field">
@@ -1097,6 +1129,11 @@ tr:hover td { background: rgba(27,42,74,0.05); }
                 <span class="score-btn-name" id="score-btn-yours-label" data-i18n="btn_yours">Votre Scoring</span>
               </button>
             </div>
+          </div>
+
+          <div id="ext-panel" class="field">
+            <label data-i18n="label_extensions">Extensions incluses</label>
+            <div class="ext-grid" id="ext-grid"></div>
           </div>
 
           <div class="tire-divider"></div>
@@ -1185,9 +1222,10 @@ const TRANSLATIONS = {
     config_title: 'Configuration',
     label_csv: 'Fichier CSV',
     drop_hint: 'Glissez votre CSV ici ou cliquez',
-    btn_load_default: 'CSV par défaut',
+    btn_load_default: 'Scoring par défaut',
     default_loaded: 'heat_full.csv chargé',
     default_file: 'heat_full.csv',
+    label_extensions: 'Extensions incluses',
     label_z: 'Z — Nombre de decks',
     label_x: 'X — Cartes Base par deck',
     label_y: 'Y — Cartes Avancées par deck',
@@ -1200,7 +1238,7 @@ const TRANSLATIONS = {
     empty_sub: 'Importez un CSV et lancez la génération',
     no_csv_title: 'Aucun fichier',
     no_csv_sub: 'Importez un CSV pour voir un aperçu',
-    err_no_csv: 'Aucun fichier CSV chargé. Importez un fichier ou cliquez sur "CSV par défaut".',
+    err_no_csv: 'Aucun fichier CSV chargé. Importez un fichier ou cliquez sur "Scoring par défaut".',
     err_cols: 'Colonnes manquantes dans le CSV : ',
     err_not_enough_base: 'Pas assez de cartes Base ({count}) pour créer {z} decks de {x} cartes Base sans doublon d\'ID.',
     err_not_enough_adv: 'Pas assez de cartes Avancées ({count}) pour créer {z} decks de {y} cartes Avancées sans doublon d\'ID.',
@@ -1260,9 +1298,10 @@ const TRANSLATIONS = {
     config_title: 'Configuration',
     label_csv: 'CSV File',
     drop_hint: 'Drag your CSV here or click',
-    btn_load_default: 'Default CSV',
+    btn_load_default: 'Default Scoring',
     default_loaded: 'heat_full.csv loaded',
     default_file: 'heat_full.csv',
+    label_extensions: 'Included expansions',
     label_z: 'Z — Number of decks',
     label_x: 'X — Base cards per deck',
     label_y: 'Y — Advanced cards per deck',
@@ -1275,7 +1314,7 @@ const TRANSLATIONS = {
     empty_sub: 'Import a CSV and generate decks',
     no_csv_title: 'No file',
     no_csv_sub: 'Import a CSV to see a preview',
-    err_no_csv: 'No CSV file loaded. Import a file or click "Default CSV".',
+    err_no_csv: 'No CSV file loaded. Import a file or click "Default Scoring".',
     err_cols: 'Missing columns in CSV: ',
     err_not_enough_base: 'Not enough Base cards ({count}) to create {z} decks of {x} Base cards without duplicate IDs.',
     err_not_enough_adv: 'Not enough Advanced cards ({count}) to create {z} decks of {y} Advanced cards without duplicate IDs.',
@@ -1560,9 +1599,38 @@ function loadCSVText(text, filename) {
   applyScoring();
   document.getElementById('file-name').textContent = filename || 'heat_full.csv';
   document.getElementById('file-name').className = 'file-name loaded';
+  renderExtensionCheckboxes(csvData);
   renderCsvPreview(csvData);
   renderCsvSummary(csvData);
   showAlert('info', `✓ ${csvData.length} ${t('cards_total')} (${filename || 'heat_full.csv'})`);
+}
+
+// ─── Extension checkboxes ───────────────────────────────────────────────────
+function renderExtensionCheckboxes(data) {
+  const boites = [...new Set(data.map(r => r.Boite).filter(Boolean))].sort();
+  const grid = document.getElementById('ext-grid');
+  grid.innerHTML = '';
+  boites.forEach(boite => {
+    const label = document.createElement('label');
+    label.className = 'ext-chip checked';
+    label.title = boite;
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = boite;
+    cb.checked = true;
+    cb.addEventListener('change', () => label.classList.toggle('checked', cb.checked));
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(boite));
+    grid.appendChild(label);
+  });
+  document.getElementById('ext-panel').style.display = boites.length > 0 ? '' : 'none';
+}
+
+function getSelectedExtensions() {
+  const checkboxes = document.querySelectorAll('#ext-grid .ext-chip input[type="checkbox"]');
+  if (!checkboxes.length) return null; // no filter if panel not shown
+  const selected = [...checkboxes].filter(cb => cb.checked).map(cb => cb.value);
+  return selected;
 }
 
 // ─── Drag & Drop ───────────────────────────────────────────────────────────
@@ -1816,7 +1884,10 @@ function generateDecks() {
   const missing  = required.filter(c => !csvData[0] || csvData[0][c] === undefined);
   if (missing.length) { showAlert('error', t('err_cols') + missing.join(', ')); return; }
 
-  const cards    = csvData;
+  const selectedExt = getSelectedExtensions();
+  const cards = selectedExt && selectedExt.length > 0
+    ? csvData.filter(r => !r.Boite || selectedExt.includes(r.Boite))
+    : csvData;
   const basePool = cards.filter(c => isBaseCard(c));
   const advPool  = cards.filter(c => isAdvCard(c));
 
@@ -2258,6 +2329,8 @@ function resetAll() {
       <div class="empty-sub">${t('no_csv_sub')}</div>
     </div>`;
   document.getElementById('csv-info-panel').style.display = 'none';
+  document.getElementById('ext-grid').innerHTML = '';
+  document.getElementById('ext-panel').style.display = 'none';
 }
 
 // Init
