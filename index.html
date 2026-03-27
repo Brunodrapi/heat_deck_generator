@@ -1254,15 +1254,6 @@ tr:hover td { background: rgba(27,42,74,0.05); }
 
           <div class="tire-divider"></div>
 
-          <div class="field">
-            <label data-i18n="label_tries">Essais max</label>
-            <input type="number" id="nb-tries" min="1" max="5000" value="300">
-          </div>
-          <div class="field">
-            <label data-i18n="label_seed">Graine aléatoire</label>
-            <input type="number" id="nb-seed" min="0" value="42">
-          </div>
-
           <button class="btn btn-primary" onclick="generate()">
             <span id="gen-text" data-i18n="btn_generate">🏁 Générer les Decks</span>
           </button>
@@ -2057,8 +2048,8 @@ function generateDecks() {
 
   const X        = parseInt(document.getElementById('nb-base').value)  || 0;
   const Y        = parseInt(document.getElementById('nb-adv').value)   || 0;
-  const maxTries = Math.max(1, parseInt(document.getElementById('nb-tries').value) || 300);
-  const seedBase = parseInt(document.getElementById('nb-seed').value)  || 42;
+  const maxTries = 550;
+  const seedBase = 42;
 
   const required = ['ID', 'Type', 'Nom', 'Score'];
   const missing  = required.filter(c => !csvData[0] || csvData[0][c] === undefined);
