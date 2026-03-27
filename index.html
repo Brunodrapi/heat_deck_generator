@@ -2157,6 +2157,13 @@ function balancedAssign(cards, deckTargets, X, Y, maxTries, seedBase) {
       if (!incomplete.length) break;
 
       const { d: deck } = incomplete[0];
+      const bUsed = deck.cards.filter(c => isBaseCard(c)).length;
+      const aUsed = deck.cards.filter(c => isAdvCard(c)).length;
+      const slotsLeft = (X - bUsed) + (Y - aUsed);
+      const budgetLeft = deck.target - deck.score;
+      const perCardBudget = slotsLeft > 0 ? budgetLeft / slotsLeft : 0;
+      const scoreMargin = 2.5; // cartes trop éloignées du budget/carte sont exclues si d'autres existent
+
       const candidates = shuffled
         .filter(card => !usedIds.has(card.ID) && canAdd(deck, card, X, Y))
         .sort((a, b) => {
@@ -2167,7 +2174,9 @@ function balancedAssign(cards, deckTargets, X, Y, maxTries, seedBase) {
 
       if (!candidates.length) { failed = true; break; }
 
-      const chosen = candidates[0]; // always pick best candidate for target; variety comes from shuffled pool
+      // Prefer cards within score margin of per-card budget; fall back to all candidates
+      const acceptable = candidates.filter(c => Math.abs((parseFloat(c.Score) || 0) - perCardBudget) <= scoreMargin);
+      const chosen = (acceptable.length > 0 ? acceptable : candidates)[0];
       deck.cards.push(chosen);
       deck.names.add(chosen.Nom);
       deck.score += parseFloat(chosen.Score) || 0;
