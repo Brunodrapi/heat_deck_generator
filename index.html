@@ -1139,15 +1139,15 @@ tr:hover td { background: rgba(27,42,74,0.05); }
           <div class="tire-divider"></div>
 
           <div class="field">
-            <label data-i18n="label_z">Z — Nombre de decks</label>
+            <label data-i18n="label_z">Nombre de decks</label>
             <input type="number" id="nb-decks" min="1" max="50" value="4">
           </div>
           <div class="field">
-            <label data-i18n="label_x">X — Cartes Simple par deck</label>
+            <label data-i18n="label_x">Cartes Simple par deck</label>
             <input type="number" id="nb-base" min="0" max="100" value="1">
           </div>
           <div class="field">
-            <label data-i18n="label_y">Y — Cartes Avancées par deck</label>
+            <label data-i18n="label_y">Cartes Avancées par deck</label>
             <input type="number" id="nb-adv" min="0" max="100" value="3">
           </div>
 
@@ -1175,7 +1175,7 @@ tr:hover td { background: rgba(27,42,74,0.05); }
 
       <div class="panel" style="margin-top:1rem" id="csv-info-panel" style="display:none">
         <div class="section-header">
-          <span class="section-title" data-i18n="csv_summary">Résumé CSV</span>
+          <span class="section-title" data-i18n="csv_summary">Cartes disponibles</span>
         </div>
         <div class="panel-body" id="csv-summary"></div>
       </div>
@@ -1185,7 +1185,7 @@ tr:hover td { background: rgba(27,42,74,0.05); }
     <div>
       <div class="tab-bar">
         <div class="tab active" onclick="switchTab('decks')" id="tab-decks" data-i18n="tab_decks">Decks</div>
-        <div class="tab" onclick="switchTab('csv')" id="tab-csv" data-i18n="tab_csv">Aperçu CSV</div>
+        <div class="tab" onclick="switchTab('csv')" id="tab-csv" data-i18n="tab_csv">Aperçu scoring</div>
       </div>
 
       <div class="tab-content active" id="content-decks">
@@ -1226,14 +1226,14 @@ const TRANSLATIONS = {
     default_loaded: 'heat_full.csv chargé',
     default_file: 'heat_full.csv',
     label_extensions: 'Extensions incluses',
-    label_z: 'Z — Nombre de decks',
-    label_x: 'X — Cartes Base par deck',
-    label_y: 'Y — Cartes Avancées par deck',
+    label_z: 'Nombre de decks',
+    label_x: 'Cartes Simple par deck',
+    label_y: 'Cartes Avancées par deck',
     btn_generate: '⚡ Générer les Decks',
     btn_reset: '↺ Réinitialiser',
-    csv_summary: 'Résumé CSV',
+    csv_summary: 'Cartes disponibles',
     tab_decks: 'Decks',
-    tab_csv: 'Aperçu CSV',
+    tab_csv: 'Aperçu scoring',
     empty_title: 'En attente',
     empty_sub: 'Importez un CSV et lancez la génération',
     no_csv_title: 'Aucun fichier',
@@ -1302,14 +1302,14 @@ const TRANSLATIONS = {
     default_loaded: 'heat_full.csv loaded',
     default_file: 'heat_full.csv',
     label_extensions: 'Included expansions',
-    label_z: 'Z — Number of decks',
-    label_x: 'X — Base cards per deck',
-    label_y: 'Y — Advanced cards per deck',
+    label_z: 'Number of decks',
+    label_x: 'Simple cards per deck',
+    label_y: 'Advanced cards per deck',
     btn_generate: '⚡ Generate Decks',
     btn_reset: '↺ Reset',
-    csv_summary: 'CSV Summary',
+    csv_summary: 'Available cards',
     tab_decks: 'Decks',
-    tab_csv: 'CSV Preview',
+    tab_csv: 'Scoring preview',
     empty_title: 'Waiting',
     empty_sub: 'Import a CSV and generate decks',
     no_csv_title: 'No file',
@@ -1618,7 +1618,10 @@ function renderExtensionCheckboxes(data) {
     cb.type = 'checkbox';
     cb.value = boite;
     cb.checked = true;
-    cb.addEventListener('change', () => label.classList.toggle('checked', cb.checked));
+    cb.addEventListener('change', () => {
+      label.classList.toggle('checked', cb.checked);
+      if (csvData) renderCsvSummary(csvData);
+    });
     label.appendChild(cb);
     label.appendChild(document.createTextNode(boite));
     grid.appendChild(label);
@@ -1746,17 +1749,20 @@ function applyEdits() {
 }
 
 function renderCsvSummary(data) {
-  const baseCards = data.filter(r => isBase(r));
-  const advCards = data.filter(r => !isBase(r));
-  const avgScore = data.reduce((s, r) => s + parseFloat(r.Score || 0), 0) / (data.length || 1);
-  const scoringLabel = activeScoring || 'Score';
+  const selectedExt = getSelectedExtensions();
+  const filtered = selectedExt && selectedExt.length > 0
+    ? data.filter(r => !r.Boite || selectedExt.includes(r.Boite))
+    : data;
+  const baseCards = filtered.filter(r => isBase(r));
+  const advCards  = filtered.filter(r => !isBase(r));
+  const avgScore  = filtered.reduce((s, r) => s + parseFloat(r.Score || 0), 0) / (filtered.length || 1);
   const panel = document.getElementById('csv-info-panel');
   panel.style.display = 'block';
   document.getElementById('csv-summary').innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.6rem">
       <div class="stat-card"><div class="stat-label">${t('base_count')}</div><div class="stat-value blue">${baseCards.length}</div></div>
       <div class="stat-card"><div class="stat-label">${t('adv_count')}</div><div class="stat-value accent">${advCards.length}</div></div>
-      <div class="stat-card"><div class="stat-label">${t('cards_total')}</div><div class="stat-value">${data.length}</div></div>
+      <div class="stat-card"><div class="stat-label">${t('cards_total')}</div><div class="stat-value">${filtered.length}</div></div>
       <div class="stat-card"><div class="stat-label">${t('avg_score')}</div><div class="stat-value green">${avgScore.toFixed(1)}</div></div>
     </div>`;
 }
