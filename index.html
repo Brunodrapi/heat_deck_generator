@@ -2001,11 +2001,11 @@ function estimateTarget(cards, Z, X, Y) {
   return (usedB + usedA) / Z;
 }
 
-function scorePenalty(decks, target) {
+function scorePenalty(decks, deckTargets) {
   const scores = decks.map(d => d.score);
   const spread = Math.max(...scores) - Math.min(...scores);
-  const absSum = scores.reduce((s, v) => s + Math.abs(v - target), 0);
-  return { penalty: absSum + spread * 1.5, spread };
+  const absSum = decks.reduce((s, d, i) => s + Math.abs(d.score - deckTargets[i]), 0);
+  return { penalty: absSum, spread };
 }
 
 function canAdd(deck, card, X, Y) {
@@ -2077,39 +2077,32 @@ function generateDecks() {
 
   setTimeout(() => {
     try {
-      // ── Stratified card pools per tier ─────────────────────────────────
-      const sortedB = [...basePool].sort((a, b) => (parseFloat(b.Score) || 0) - (parseFloat(a.Score) || 0));
-      const sortedA = [...advPool].sort((a, b)  => (parseFloat(b.Score) || 0) - (parseFloat(a.Score) || 0));
+      // ── Per-deck targets from tier partition ───────────────────────────
+      const tierTargets = computeTierTargets(cards, nFort, nMed, nFaible, X, Y);
+      const deckTargetsList = [
+        ...Array(nFort).fill(tierTargets.fort   ?? 0),
+        ...Array(nMed).fill(tierTargets.med     ?? 0),
+        ...Array(nFaible).fill(tierTargets.faible ?? 0),
+      ];
 
-      const fortCards   = [...sortedB.slice(0,                    nFort * X),           ...sortedA.slice(0,                    nFort * Y)];
-      const medCards    = [...sortedB.slice(nFort * X,           (nFort + nMed) * X),   ...sortedA.slice(nFort * Y,           (nFort + nMed) * Y)];
-      const faibleCards = [...sortedB.slice((nFort + nMed) * X),                        ...sortedA.slice((nFort + nMed) * Y)];
-
-      let deckId = 1;
-      const allDecks = [];
-
-      const runTier = (tierCards, n, tierKey) => {
-        if (n === 0) return true;
-        const r = balancedAssign(tierCards, n, X, Y, maxTries, seedBase);
-        if (!r) return false;
-        r.decks.forEach(d => allDecks.push({ ...d, id: deckId++, tier: tierKey }));
-        return true;
-      };
-
-      if (!runTier(fortCards,   nFort,   'fort'))   { btn.innerHTML = t('btn_generate'); showAlert('error', t('err_no_solution')); return; }
-      if (!runTier(medCards,    nMed,    'med'))     { btn.innerHTML = t('btn_generate'); showAlert('error', t('err_no_solution')); return; }
-      if (!runTier(faibleCards, nFaible, 'faible')) { btn.innerHTML = t('btn_generate'); showAlert('error', t('err_no_solution')); return; }
-
+      const result = balancedAssign(cards, deckTargetsList, X, Y, maxTries, seedBase);
       btn.innerHTML = t('btn_generate');
 
-      const scores = allDecks.map(d => d.score);
-      const mean   = scores.reduce((a, b) => a + b, 0) / scores.length;
-      const spread = Math.max(...scores) - Math.min(...scores);
+      if (!result) { showAlert('error', t('err_no_solution')); return; }
 
-      generatedDecks = allDecks;
+      // Assign tier labels (fort = first nFort decks, med = next, faible = last)
+      let di = 0;
+      for (let i = 0; i < nFort;   i++) result.decks[di++].tier = 'fort';
+      for (let i = 0; i < nMed;    i++) result.decks[di++].tier = 'med';
+      for (let i = 0; i < nFaible; i++) result.decks[di++].tier = 'faible';
+
+      const scores = result.decks.map(d => d.score);
+      const mean   = scores.reduce((a, b) => a + b, 0) / scores.length;
+
+      generatedDecks = result.decks;
       _lastVariants  = [];
       _lastParams    = { X, Y, Z };
-      renderDecks({ decks: allDecks, target: mean, spread, attempts_used: maxTries }, [], { X, Y, Z, thresholdMet: true });
+      renderDecks({ decks: result.decks, target: mean, spread: result.spread, attempts_used: result.attempts_used }, [], { X, Y, Z, thresholdMet: true });
       showAlert('success', t('success_gen').replace('{z}', Z));
     } catch(e) {
       btn.innerHTML = t('btn_generate');
@@ -2118,19 +2111,22 @@ function generateDecks() {
   }, 50);
 }
 
-function balancedAssign(cards, Z, X, Y, maxTries, seedBase) {
-  const target = estimateTarget(cards, Z, X, Y);
+function balancedAssign(cards, deckTargets, X, Y, maxTries, seedBase) {
+  const Z = deckTargets.length;
   let best = null;
   let bestPenalty = Infinity;
 
   for (let attempt = 0; attempt < maxTries; attempt++) {
     const rand     = mulberry32(seedBase + attempt * 101);
     const shuffled = shuffleSeeded(cards, rand);
-    const decks    = Array.from({ length: Z }, () => ({ cards: [], names: new Set(), score: 0 }));
+    const decks    = Array.from({ length: Z }, (_, i) => ({
+      cards: [], names: new Set(), score: 0, target: deckTargets[i]
+    }));
     const usedIds  = new Set();
     let failed     = false;
 
     while (true) {
+      // Fill the deck most behind its own target first
       const incomplete = decks
         .map((d, i) => ({ d, i }))
         .filter(({ d }) => {
@@ -2138,7 +2134,7 @@ function balancedAssign(cards, Z, X, Y, maxTries, seedBase) {
           const a = d.cards.filter(c => isAdvCard(c)).length;
           return b < X || a < Y;
         })
-        .sort((x, y) => x.d.score - y.d.score);
+        .sort((x, y) => (x.d.score - x.d.target) - (y.d.score - y.d.target));
 
       if (!incomplete.length) break;
 
@@ -2148,7 +2144,7 @@ function balancedAssign(cards, Z, X, Y, maxTries, seedBase) {
         .sort((a, b) => {
           const sa = parseFloat(a.Score) || 0;
           const sb = parseFloat(b.Score) || 0;
-          return Math.abs(deck.score + sa - target) - Math.abs(deck.score + sb - target);
+          return Math.abs(deck.score + sa - deck.target) - Math.abs(deck.score + sb - deck.target);
         });
 
       if (!candidates.length) { failed = true; break; }
@@ -2166,7 +2162,7 @@ function balancedAssign(cards, Z, X, Y, maxTries, seedBase) {
     const allIds = decks.flatMap(d => d.cards.map(c => c.ID));
     if (new Set(allIds).size !== allIds.length) continue;
 
-    const { penalty, spread } = scorePenalty(decks, target);
+    const { penalty, spread } = scorePenalty(decks, deckTargets);
 
     if (penalty < bestPenalty) {
       bestPenalty = penalty;
@@ -2177,12 +2173,13 @@ function balancedAssign(cards, Z, X, Y, maxTries, seedBase) {
           adv:  d.cards.filter(c => isAdvCard(c)),
           score: d.score,
         })),
-        target, penalty, spread,
+        spread,
         attempts_used: attempt + 1,
       };
     }
 
-    if (best && best.spread / (target || 1) < 0.005) break;
+    // Early stop: all decks within 1% of their individual target
+    if (best && best.decks.every((d, i) => Math.abs(d.score - deckTargets[i]) / (deckTargets[i] || 1) < 0.01)) break;
   }
 
   return best;
