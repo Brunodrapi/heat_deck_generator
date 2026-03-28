@@ -1607,8 +1607,10 @@ function computeTierTargets(cards, nFort, nMed, nFaible, X, Y) {
   const fortA   = nFort   * Y > 0 ? allA.slice(0, nFort * Y)                                  : [];
   const faibleB = nFaible * X > 0 ? allB.slice(Math.max(0, allB.length - nFaible * X))        : [];
   const faibleA = nFaible * Y > 0 ? allA.slice(Math.max(0, allA.length - nFaible * Y))        : [];
-  const medB    = nMed    * X > 0 ? allB.slice(nFort * X, nFort * X + nMed * X)               : [];
-  const medA    = nMed    * Y > 0 ? allA.slice(nFort * Y, nFort * Y + nMed * Y)               : [];
+  const medStartB = nMed * X > 0 ? Math.floor((allB.length - nMed * X) / 2) : 0;
+  const medStartA = nMed * Y > 0 ? Math.floor((allA.length - nMed * Y) / 2) : 0;
+  const medB    = nMed    * X > 0 ? allB.slice(medStartB, medStartB + nMed * X)               : [];
+  const medA    = nMed    * Y > 0 ? allA.slice(medStartA, medStartA + nMed * Y)               : [];
 
   function avg(bCards, aCards, n) {
     if (n === 0) return null;
