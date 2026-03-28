@@ -1597,24 +1597,29 @@ function computeTierTargets(cards, nFort, nMed, nFaible, X, Y) {
   const Z = nFort + nMed + nFaible;
   if (Z === 0) return { fort: null, med: null, faible: null };
 
-  const sortedB = cards.filter(c => isBaseCard(c))
-    .sort((a, b) => (parseFloat(b.Score) || 0) - (parseFloat(a.Score) || 0))
-    .slice(0, Z * X);
-  const sortedA = cards.filter(c => isAdvCard(c))
-    .sort((a, b) => (parseFloat(b.Score) || 0) - (parseFloat(a.Score) || 0))
-    .slice(0, Z * Y);
+  // Full pool sorted descending — fort takes from top, faible from bottom, med from middle
+  const allB = cards.filter(c => isBaseCard(c))
+    .sort((a, b) => (parseFloat(b.Score) || 0) - (parseFloat(a.Score) || 0));
+  const allA = cards.filter(c => isAdvCard(c))
+    .sort((a, b) => (parseFloat(b.Score) || 0) - (parseFloat(a.Score) || 0));
 
-  function tierScore(n, startB, startA) {
+  const fortB   = nFort   * X > 0 ? allB.slice(0, nFort * X)                                  : [];
+  const fortA   = nFort   * Y > 0 ? allA.slice(0, nFort * Y)                                  : [];
+  const faibleB = nFaible * X > 0 ? allB.slice(Math.max(0, allB.length - nFaible * X))        : [];
+  const faibleA = nFaible * Y > 0 ? allA.slice(Math.max(0, allA.length - nFaible * Y))        : [];
+  const medB    = nMed    * X > 0 ? allB.slice(nFort * X, nFort * X + nMed * X)               : [];
+  const medA    = nMed    * Y > 0 ? allA.slice(nFort * Y, nFort * Y + nMed * Y)               : [];
+
+  function avg(bCards, aCards, n) {
     if (n === 0) return null;
-    const b = sortedB.slice(startB, startB + n * X).reduce((s, c) => s + (parseFloat(c.Score) || 0), 0);
-    const a = sortedA.slice(startA, startA + n * Y).reduce((s, c) => s + (parseFloat(c.Score) || 0), 0);
-    return (b + a) / n;
+    const sum = [...bCards, ...aCards].reduce((s, c) => s + (parseFloat(c.Score) || 0), 0);
+    return sum / n;
   }
 
   return {
-    fort:   tierScore(nFort,   0,                   0),
-    med:    tierScore(nMed,    nFort * X,            nFort * Y),
-    faible: tierScore(nFaible, (nFort + nMed) * X,  (nFort + nMed) * Y),
+    fort:   avg(fortB,   fortA,   nFort),
+    med:    avg(medB,    medA,    nMed),
+    faible: avg(faibleB, faibleA, nFaible),
   };
 }
 
