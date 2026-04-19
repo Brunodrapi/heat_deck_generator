@@ -724,6 +724,34 @@ input[type="number"]::-webkit-inner-spin-button { opacity: 0.5; }
   text-align: right;
 }
 
+/* ── REFRESH BUTTON ───────────────────────────────────────── */
+.deck-refresh-btn {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.25);
+  color: rgba(255,255,255,0.6);
+  border-radius: 3px;
+  padding: 0.2rem 0.45rem;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  margin-left: 0.5rem;
+  font-family: 'Roboto Condensed', sans-serif;
+}
+.deck-refresh-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+
+/* ── PRINT / PDF ──────────────────────────────────────────── */
+@media print {
+  header, #alert-zone, .layout > div:first-child,
+  .tab-bar, .export-row, .stats-bar, .balance-bar,
+  .deck-refresh-btn, #content-csv { display: none !important; }
+  body { background: #fff; }
+  .layout { display: block; }
+  .layout > div:last-child { width: 100%; }
+  .tab-content { display: block !important; }
+  .deck-card { break-inside: avoid; page-break-inside: avoid; }
+  .decks-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
 /* ── EMPTY STATE ──────────────────────────────────────────── */
 .empty-state {
   text-align: center;
@@ -1340,6 +1368,9 @@ const TRANSLATIONS = {
     balance_bad: 'Déséquilibré',
     export_csv: '↓ Exporter CSV',
     export_json: '↓ Exporter JSON',
+    export_pdf: '↓ Exporter PDF',
+    btn_refresh_deck: '↻ Rafraîchir',
+    warn_no_refresh: 'Aucune combinaison différente trouvée pour ce deck.',
     cards_total: 'cartes chargées',
     base_count: 'cartes Base',
     adv_count: 'cartes Avancées',
@@ -1422,6 +1453,9 @@ const TRANSLATIONS = {
     balance_bad: 'Unbalanced',
     export_csv: '↓ Export CSV',
     export_json: '↓ Export JSON',
+    export_pdf: '↓ Export PDF',
+    btn_refresh_deck: '↻ Refresh',
+    warn_no_refresh: 'No different combination found for this deck.',
     cards_total: 'cards loaded',
     base_count: 'Base cards',
     adv_count: 'Advanced cards',
@@ -2305,7 +2339,10 @@ function renderDecks(result, variants, params) {
             <div class="deck-number">${t('deck_label')}${tierBadgeHtml}</div>
             <div class="deck-title">#${deck.id}</div>
           </div>
-          <div class="deck-score-badge">${deck.score.toFixed(0)} pts</div>
+          <div style="display:flex;align-items:center;gap:0.4rem">
+            <button class="deck-refresh-btn" onclick="refreshDeck(${idx})" title="${t('btn_refresh_deck')}">↻</button>
+            <div class="deck-score-badge">${deck.score.toFixed(0)} pts</div>
+          </div>
         </div>
         <div class="deck-body">
     `;
@@ -2434,6 +2471,7 @@ function renderDecks(result, variants, params) {
     <div class="export-row">
       <button class="btn btn-secondary" onclick="exportCSV()">${t('export_csv')}</button>
       <button class="btn btn-secondary" onclick="exportJSON()">${t('export_json')}</button>
+      <button class="btn btn-secondary" onclick="window.print()">${t('export_pdf')}</button>
     </div>`;
 
   document.getElementById('output').innerHTML = html;
@@ -2442,6 +2480,51 @@ function renderDecks(result, variants, params) {
 // Store variants for useVariant()
 let _lastVariants = [];
 let _lastParams   = {};
+
+// ─── Refresh single deck ────────────────────────────────────────────────────
+function refreshDeck(deckIdx) {
+  if (!generatedDecks || !csvData) return;
+  const deck = generatedDecks[deckIdx];
+  const X = _lastParams.X || 0;
+  const Y = _lastParams.Y || 0;
+
+  // IDs locked by other decks
+  const lockedIds = new Set(
+    generatedDecks
+      .filter((_, i) => i !== deckIdx)
+      .flatMap(d => [...d.base, ...d.adv].map(c => c.ID))
+  );
+
+  // Current combination to avoid repeating
+  const currentIds = new Set([...deck.base, ...deck.adv].map(c => c.ID));
+
+  // Available pool: extension-filtered minus other decks' cards
+  const selectedExt = getSelectedExtensions();
+  const allCards = selectedExt && selectedExt.length > 0
+    ? csvData.filter(r => !r.Boite || selectedExt.includes(r.Boite))
+    : csvData;
+  const pool = allCards.filter(c => !lockedIds.has(c.ID));
+
+  // Try up to 80 different seeds to find a different combination
+  let newDeck = null;
+  for (let s = 1; s <= 80 && !newDeck; s++) {
+    const r = balancedAssign(pool, [deck.score], X, Y, 30, 42 + s * 37);
+    if (!r) continue;
+    const newIds = new Set([...r.decks[0].base, ...r.decks[0].adv].map(c => c.ID));
+    if ([...newIds].some(id => !currentIds.has(id))) newDeck = r.decks[0];
+  }
+
+  if (!newDeck) { showAlert('warn', t('warn_no_refresh')); return; }
+
+  generatedDecks[deckIdx] = { ...newDeck, id: deck.id, tier: deck.tier };
+
+  // Re-render all decks with updated generatedDecks
+  const scores = generatedDecks.map(d => d.score);
+  const mean   = scores.reduce((a, b) => a + b, 0) / scores.length;
+  const spread = Math.max(...scores) - Math.min(...scores);
+  renderDecks({ decks: generatedDecks, target: mean, spread, attempts_used: '—' }, [], { ..._lastParams, thresholdMet: true });
+  showAlert('success', `Deck #${deck.id} ${currentLang === 'fr' ? 'rafraîchi' : 'refreshed'}`);
+}
 const _origRenderDecks = renderDecks;
 
 function useVariant(vi) {
